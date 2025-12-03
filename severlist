@@ -1,0 +1,185 @@
+--// STEAL & BRAINROT — COSYHUB STYLE MENU (FULL VERSION)
+
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+
+local PLACE_ID = 109983668079237
+
+---------------------------------------------------------------------
+-- BRAINROT LIST
+---------------------------------------------------------------------
+local BrainrotList = {
+    "La Vacca Saturno Saturnita",
+    "Los Tralaleritos",
+    "Graipuss Medussi",
+    "La Grande Combinasion",
+    "Nuclearo Dinossauro",
+    "Blackhole Goat",
+    "Karkerkar Kurkur",
+    "Sammyni Spyderini",
+    "Agarrini la Palini",
+    "Dil Dul Dul",
+    "Spaghetti Tualetti",
+    "Los Tralaleritas",
+    "Tictac Sahur",
+    "La Taco Combinasion",
+    "Guerriro Digitale",
+    "Extinct Matteo",
+    "Los Combinasionas",
+    "Perrito Burrito",
+}
+
+---------------------------------------------------------------------
+-- GUI BASE
+---------------------------------------------------------------------
+local Gui = Instance.new("ScreenGui", game.CoreGui)
+Gui.ResetOnSpawn = false
+
+-- Main Frame (500×380)
+local Main = Instance.new("Frame", Gui)
+Main.Size = UDim2.new(0, 500, 0, 380)
+Main.Position = UDim2.new(0.5, -250, 0.5, -190)
+Main.BackgroundColor3 = Color3.fromRGB(10, 15, 20)
+Main.Visible = true
+Main.Active = true
+Main.Draggable = true
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 22)
+
+-- Scale Animation
+local UIScale = Instance.new("UIScale", Main)
+UIScale.Scale = 0.2
+game:GetService("TweenService"):Create(UIScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+
+---------------------------------------------------------------------
+-- TOGGLE BUTTON (TRÒN NEON)
+---------------------------------------------------------------------
+local Toggle = Instance.new("Cozyhub", Gui)
+Toggle.Size = UDim2.new(0, 55, 0, 55)
+Toggle.Position = UDim2.new(0, 25, 0.5, -27)
+Toggle.Text = "≡"
+Toggle.TextColor3 = Color3.fromRGB(0, 255, 255)
+Toggle.Font = Enum.Font.GothamBold
+Toggle.TextSize = 32
+Toggle.BackgroundColor3 = Color3.fromRGB(0, 50, 60)
+Instance.new("UICorner", Toggle).CornerRadius = UDim.new(1,0)
+
+Toggle.MouseButton1Click:Connect(function()
+	Main.Visible = not Main.Visible
+end)
+
+---------------------------------------------------------------------
+-- TITLE
+---------------------------------------------------------------------
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1, 0, 0, 55)
+Title.BackgroundTransparency = 1
+Title.Text = "SERVER MENU"
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 42
+Title.TextColor3 = Color3.fromRGB(0, 255, 255)
+
+---------------------------------------------------------------------
+-- SERVER LIST
+---------------------------------------------------------------------
+local List = Instance.new("ScrollingFrame", Main)
+List.Size = UDim2.new(1, -40, 1, -150)
+List.Position = UDim2.new(0, 20, 0, 65)
+List.CanvasSize = UDim2.new(0, 0, 0, 0)
+List.ScrollBarThickness = 6
+List.BackgroundColor3 = Color3.fromRGB(15, 20, 25)
+Instance.new("UICorner", List).CornerRadius = UDim.new(0, 12)
+
+local Layout = Instance.new("UIListLayout", List)
+Layout.Padding = UDim.new(0, 10)
+
+---------------------------------------------------------------------
+-- BUTTONS
+---------------------------------------------------------------------
+local Refresh = Instance.new("TextButton", Main)
+Refresh.Size = UDim2.new(0.3, 0, 0, 60)
+Refresh.Position = UDim2.new(0.05, 0, 1, -70)
+Refresh.Text = "REFRESH"
+Refresh.Font = Enum.Font.GothamBold
+Refresh.TextSize = 30
+Refresh.BackgroundColor3 = Color3.fromRGB(0, 170, 200)
+Instance.new("UICorner", Refresh).CornerRadius = UDim.new(0, 15)
+
+local AutoJoin = Instance.new("TextButton", Main)
+AutoJoin.Size = UDim2.new(0.6, 0, 0, 60)
+AutoJoin.Position = UDim2.new(0.35, 0, 1, -70)
+AutoJoin.Text = "AUTO JOIN"
+AutoJoin.Font = Enum.Font.GothamBold
+AutoJoin.TextSize = 30
+AutoJoin.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+Instance.new("UICorner", AutoJoin).CornerRadius = UDim.new(0, 15)
+
+---------------------------------------------------------------------
+-- FUNCTION: FAKE SERVERS
+---------------------------------------------------------------------
+local function CreateFakeServers()
+	List:ClearAllChildren()
+
+	local layout = Instance.new("UIListLayout", List)
+	layout.Padding = UDim.new(0, 10)
+
+	for i = 1, 12 do
+		local brainrot = BrainrotList[math.random(1, #BrainrotList)]
+		local ms = math.random(10, 60)
+		local players = math.random(1, 8)
+
+		local item = Instance.new("Frame", List)
+		item.Size = UDim2.new(1, -10, 0, 85)
+		item.BackgroundColor3 = Color3.fromRGB(20, 27, 33)
+		Instance.new("UICorner", item).CornerRadius = UDim.new(0, 15)
+
+		local label = Instance.new("TextLabel", item)
+		label.Size = UDim2.new(0.7, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Text = brainrot .. "\nPlayers: " .. players .. "/8    |   m/s: " .. ms
+		label.Font = Enum.Font.GothamBold
+		label.TextSize = 26
+		label.TextColor3 = Color3.fromRGB(0, 255, 255)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Position = UDim2.new(0.05, 0, 0, 0)
+
+		local join = Instance.new("TextButton", item)
+		join.Size = UDim2.new(0.25, 0, 0.75, 0)
+		join.Position = UDim2.new(0.72, 0, 0.12, 0)
+		join.Text = "JOIN"
+		join.Font = Enum.Font.GothamBold
+		join.TextSize = 26
+		join.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+		Instance.new("UICorner", join).CornerRadius = UDim.new(0, 12)
+
+		join.MouseButton1Click:Connect(function()
+			TeleportService:Teleport(PLACE_ID)
+		end)
+	end
+
+	List.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y)
+end
+
+CreateFakeServers()
+Refresh.MouseButton1Click:Connect(CreateFakeServers)
+
+---------------------------------------------------------------------
+-- AUTO JOIN
+---------------------------------------------------------------------
+local Auto = false
+
+AutoJoin.MouseButton1Click:Connect(function()
+	Auto = not Auto
+
+	if Auto then
+		AutoJoin.Text = "AUTO JOIN: ON"
+	else
+		AutoJoin.Text = "AUTO JOIN"
+		return
+	end
+
+	while Auto do
+		wait(1)
+		TeleportService:Teleport(PLACE_ID)
+	end
+end)
