@@ -1,0 +1,275 @@
+--========================================================--
+--            COZYHUB KEY SYSTEM - FULL PACKAGE           --
+--   24h Expire + HWID Lock + IP Lock + GitHub Loader     --
+--========================================================--
+
+local Http = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local RbxAnalytics = game:GetService("RbxAnalyticsService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+--=================== CONFIG ==================--
+
+local FIREBASE_BASE = "https://cozyhubkey-default-rtdb.asia-southeast1.firebasedatabase.app"
+local SCRIPT_URL   = "https://raw.githubusercontent.com/aovo4504-bit/Cozyhub./main/Severlist.lua"
+local GET_KEY_URL  = "https://aovo4504-bit.github.io/CozyHub.key/"  
+
+--================= UTIL FUNCTIONS ===============--
+
+local function trim(s)
+    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function getIP()
+    local ok, res = pcall(function()
+        return Http:GetAsync("https://api.ipify.org?format=json")
+    end)
+    if not ok then return nil, "Cannot get IP" end
+
+    local decoded = Http:JSONDecode(res)
+    if not decoded or not decoded.ip then return nil, "Invalid IP" end
+
+    return decoded.ip:gsub("%.", "_")
+end
+
+local function getHWID()
+    return RbxAnalytics:GetClientId()
+end
+
+local function patchKey(key, data)
+    return Http:RequestAsync({
+        Url = FIREBASE_BASE.."/keys/"..key..".json",
+        Method = "PATCH",
+        Body = Http:JSONEncode(data),
+        Headers = { ["Content-Type"] = "application/json" }
+    })
+end
+
+local function markKeyUsed(key)
+    patchKey(key, { used = true })
+end
+
+local function fetchKeyData(key)
+    local ok, res = pcall(function()
+        return Http:GetAsync(FIREBASE_BASE.."/keys/"..key..".json")
+    end)
+    if not ok then return nil, "Server error" end
+
+    local decoded
+    local success = pcall(function()
+        decoded = Http:JSONDecode(res)
+    end)
+
+    if not success then return nil, "Invalid key data" end
+    return decoded
+end
+
+--================= KEY VERIFY LOGIC =================--
+
+local function checkKey(key)
+    local data = fetchKeyData(key)
+    if not data then return false, "Invalid key" end
+
+    local now = os.time() * 1000
+
+    if tonumber(data.expire) < now then
+        return false, "Key expired"
+    end
+
+    if data.used == true then
+        return false, "Key already used"
+    end
+
+    local ip = getIP()
+    if data.ip ~= ip then
+        return false, "Key not for this IP"
+    end
+
+    local hwid = getHWID()
+
+    if not data.hwid then
+        patchKey(key, { hwid = hwid })
+        data.hwid = hwid
+    end
+
+    if data.hwid ~= hwid then
+        return false, "Key linked to another device"
+    end
+
+    return true, "OK"
+end
+
+--================= UI CREATION ===================--
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "CozyHubKeySystem"
+gui.ResetOnSpawn = false
+gui.Parent = PlayerGui
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 430, 0, 200)
+frame.Position = UDim2.new(0.5, -215, 0.5, -100)
+frame.BackgroundColor3 = Color3.fromRGB(0, 5, 15)
+frame.BackgroundTransparency = 0.1
+
+local stroke = Instance.new("UIStroke", frame)
+stroke.Color = Color3.fromRGB(0, 255, 255)
+stroke.Thickness = 2
+
+local corner = Instance.new("UICorner", frame)
+corner.CornerRadius = UDim.new(0,18)
+
+-- Fade effect
+frame.BackgroundTransparency = 1
+frame.Size = UDim2.new(0, 350, 0, 150)
+task.spawn(function()
+    for i = 1,10 do
+        frame.BackgroundTransparency = 1 - (i/10)
+        task.wait(0.02)
+    end
+    frame:TweenSize(UDim2.new(0,430,0,200), "Out", "Quad", 0.25)
+end)
+
+--================= TITLE + LOGO ===================--
+
+local titleFrame = Instance.new("Frame", frame)
+titleFrame.Size = UDim2.new(1, -40, 0, 50)
+titleFrame.Position = UDim2.new(0, 20, 0, 10)
+titleFrame.BackgroundTransparency = 1
+
+local logo = Instance.new("ImageLabel", titleFrame)
+logo.Size = UDim2.new(0, 40, 0, 40)
+logo.Position = UDim2.new(0, 0, 0, 5)
+logo.BackgroundTransparency = 1
+logo.Image = "rbxassetid://71650015621288"
+logo.ScaleType = Enum.ScaleType.Fit
+
+local logoCorner = Instance.new("UICorner", logo)
+logoCorner.CornerRadius = UDim.new(1, 0)
+
+local title = Instance.new("TextLabel", titleFrame)
+title.Size = UDim2.new(1, -55, 1, 0)
+title.Position = UDim2.new(0, 50, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "CozyHub Key Verification"
+title.TextColor3 = Color3.fromRGB(0,255,255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 22
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+--================ INPUT FIELD ====================--
+
+local keyBox = Instance.new("TextBox", frame)
+keyBox.Size = UDim2.new(1, -40, 0, 38)
+keyBox.Position = UDim2.new(0,20, 0,70)
+keyBox.PlaceholderText = "Enter your key..."
+keyBox.BackgroundColor3 = Color3.fromRGB(0,0,0)
+keyBox.BackgroundTransparency = 0.15
+keyBox.TextColor3 = Color3.fromRGB(255,255,255)
+keyBox.Font = Enum.Font.Gotham
+keyBox.TextSize = 18
+Instance.new("UICorner", keyBox).CornerRadius = UDim.new(0,12)
+
+local boxStroke = Instance.new("UIStroke", keyBox)
+boxStroke.Color = Color3.fromRGB(0,255,255)
+boxStroke.Thickness = 2
+
+--================ BUTTONS ====================--
+
+local verifyBtn = Instance.new("TextButton", frame)
+verifyBtn.Size = UDim2.new(0.45, -20, 0, 38)
+verifyBtn.Position = UDim2.new(0,20, 0,125)
+verifyBtn.Text = "VERIFY KEY"
+verifyBtn.BackgroundColor3 = Color3.fromRGB(0,180,220)
+verifyBtn.TextColor3 = Color3.fromRGB(0,0,0)
+verifyBtn.Font = Enum.Font.GothamBold
+verifyBtn.TextSize = 18
+Instance.new("UICorner", verifyBtn).CornerRadius = UDim.new(0,12)
+
+local getBtn = Instance.new("TextButton", frame)
+getBtn.Size = UDim2.new(0.45, -20, 0, 38)
+getBtn.Position = UDim2.new(0.55, 0, 0,125)
+getBtn.Text = "GET KEY"
+getBtn.BackgroundColor3 = Color3.fromRGB(0,120,150)
+getBtn.TextColor3 = Color3.fromRGB(0,0,0)
+getBtn.Font = Enum.Font.GothamBold
+getBtn.TextSize = 18
+Instance.new("UICorner", getBtn).CornerRadius = UDim.new(0,12)
+
+local msg = Instance.new("TextLabel", frame)
+msg.Size = UDim2.new(1,0,0,22)
+msg.Position = UDim2.new(0,0,0,165)
+msg.BackgroundTransparency = 1
+msg.Font = Enum.Font.GothamBold
+msg.TextSize = 16
+msg.TextColor3 = Color3.fromRGB(255,70,70)
+msg.Text = ""
+
+-- Glow animation
+task.spawn(function()
+    while gui.Parent do
+        stroke.Color = Color3.fromRGB(0,200,255)
+        task.wait(0.35)
+        stroke.Color = Color3.fromRGB(0,255,255)
+        task.wait(0.35)
+    end
+end)
+
+--================= BUTTON LOGIC ===================--
+
+local verifying = false
+
+verifyBtn.MouseButton1Click:Connect(function()
+    if verifying then return end
+    verifying = true
+
+    msg.TextColor3 = Color3.fromRGB(255,70,70)
+    local key = trim(keyBox.Text or "")
+
+    if key == "" then
+        msg.Text = "Please enter a key."
+        verifying = false
+        return
+    end
+
+    msg.Text = "Checking key..."
+
+    local ok, reason = checkKey(key)
+
+    if ok then
+        msg.Text = "Key valid ✔"
+        msg.TextColor3 = Color3.fromRGB(70,255,70)
+
+        markKeyUsed(key)
+        task.wait(0.4)
+
+        --========= RUN MAIN SCRIPT =========--
+        local success, err = pcall(function()
+            loadstring(game:HttpGet(SCRIPT_URL))()
+        end)
+
+        if not success then
+            msg.Text = "Error loading script!"
+            msg.TextColor3 = Color3.fromRGB(255,70,70)
+            warn("SCRIPT ERROR:", err)
+        else
+            frame:TweenSize(UDim2.new(0,0,0,0), "In", "Quad", 0.25, true, function()
+                gui:Destroy()
+            end)
+        end
+
+    else
+        msg.Text = reason
+        msg.TextColor3 = Color3.fromRGB(255,70,70)
+    end
+
+    task.wait(1)
+    verifying = false
+end)
+
+getBtn.MouseButton1Click:Connect(function()
+    setclipboard(GET_KEY_URL)
+    msg.TextColor3 = Color3.fromRGB(70,255,70)
+    msg.Text = "Get key link copied!"
+end)
