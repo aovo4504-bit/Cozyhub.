@@ -1,25 +1,21 @@
 --========================================================--
---            COZYHUB KEY SYSTEM - FULL PACKAGE           --
---   24h Expire + HWID Lock + IP Lock + GitHub Loader     --
+--           COZYHUB KEY SYSTEM - FIXED VERSION           --
+--   Check key qua Firebase + IP + HWID + Expire + used   --
+--      UI giống hình CozyHub Key bạn đã gửi             --
 --========================================================--
 
-local Http = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local RbxAnalytics = game:GetService("RbxAnalyticsService")
+local Http       = game:GetService("HttpService")
+local Players    = game:GetService("Players")
+local Analytics  = game:GetService("RbxAnalyticsService")
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
 
---=================== CONFIG ==================--
+--=================== CONFIG ===================--
 
-local FIREBASE_BASE = "https://cozyhubkey-default-rtdb.asia-southeast1.firebasedatabase.app"
-local SCRIPT_URL   = "https://raw.githubusercontent.com/aovo4504-bit/Cozyhub./main/Severlist.lua"
-local GET_KEY_URL  = "https://aovo4504-bit.github.io/CozyHub.key/"  
+local FIREBASE    = "https://cozyhubkey-default-rtdb.asia-southeast1.firebasedatabase.app"
+local GET_KEY_URL = "https://aovo4504-bit.github.io/CozyHub.key/"  -- web get key của bạn
 
---================= UTIL FUNCTIONS ===============--
-
-local function trim(s)
-    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
-end
+--=================== KEY FUNCTIONS =============--
 
 local function getIP()
     local ok, res = pcall(function()
@@ -27,194 +23,189 @@ local function getIP()
     end)
     if not ok then return nil, "Cannot get IP" end
 
-    local decoded = Http:JSONDecode(res)
-    if not decoded or not decoded.ip then return nil, "Invalid IP" end
-
-    return decoded.ip:gsub("%.", "_")
+    local data
+    local suc = pcall(function() data = Http:JSONDecode(res) end)
+    if not suc or not data or not data.ip then
+        return nil, "Invalid IP response"
+    end
+    return data.ip:gsub("%.", "_")
 end
 
 local function getHWID()
-    return RbxAnalytics:GetClientId()
+    return Analytics:GetClientId()
 end
 
-local function patchKey(key, data)
-    return Http:RequestAsync({
-        Url = FIREBASE_BASE.."/keys/"..key..".json",
-        Method = "PATCH",
-        Body = Http:JSONEncode(data),
-        Headers = { ["Content-Type"] = "application/json" }
-    })
-end
-
-local function markKeyUsed(key)
-    patchKey(key, { used = true })
-end
-
-local function fetchKeyData(key)
+local function getKeyData(key)
     local ok, res = pcall(function()
-        return Http:GetAsync(FIREBASE_BASE.."/keys/"..key..".json")
+        return Http:GetAsync(FIREBASE .. "/keys/" .. key .. ".json")
     end)
     if not ok then return nil, "Server error" end
 
-    local decoded
-    local success = pcall(function()
-        decoded = Http:JSONDecode(res)
-    end)
+    local data
+    local suc = pcall(function() data = Http:JSONDecode(res) end)
+    if not suc then return nil, "Invalid key data" end
 
-    if not success then return nil, "Invalid key data" end
-    return decoded
+    return data
 end
 
---================= KEY VERIFY LOGIC =================--
+local function patchKey(key, tbl)
+    pcall(function()
+        Http:RequestAsync({
+            Url = FIREBASE .. "/keys/" .. key .. ".json",
+            Method = "PATCH",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = Http:JSONEncode(tbl)
+        })
+    end)
+end
 
-local function checkKey(key)
-    local data = fetchKeyData(key)
-    if not data then return false, "Invalid key" end
+local function validateKey(key)
+    local data, err = getKeyData(key)
+    if not data then
+        return false, err or "Invalid key!"
+    end
 
+    -- 1) Expire 24h
     local now = os.time() * 1000
-
-    if tonumber(data.expire) < now then
-        return false, "Key expired"
+    local exp = tonumber(data.expire or 0)
+    if exp < now then
+        return false, "Key expired!"
     end
 
+    -- 2) Used
     if data.used == true then
-        return false, "Key already used"
+        return false, "Key already used!"
     end
 
-    local ip = getIP()
-    if data.ip ~= ip then
-        return false, "Key not for this IP"
+    -- 3) IP lock
+    local ip, ipErr = getIP()
+    if not ip then
+        return false, ipErr or "Cannot get IP"
+    end
+    if data.ip and data.ip ~= ip then
+        return false, "Key not for this IP!"
     end
 
+    -- 4) HWID lock (auto bind lần đầu)
     local hwid = getHWID()
-
     if not data.hwid then
+        -- lần đầu dùng -> gán hwid
         patchKey(key, { hwid = hwid })
-        data.hwid = hwid
-    end
-
-    if data.hwid ~= hwid then
-        return false, "Key linked to another device"
+    elseif data.hwid ~= hwid then
+        return false, "Key linked to another device!"
     end
 
     return true, "OK"
 end
 
---================= UI CREATION ===================--
+local function markUsed(key)
+    patchKey(key, { used = true })
+end
+
+--=================== UI TẠO GIỐNG HÌNH ===================--
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "CozyHubKeySystem"
+gui.Name = "CozyHubKeyUI"
 gui.ResetOnSpawn = false
 gui.Parent = PlayerGui
 
+-- MAIN FRAME
 local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 430, 0, 200)
-frame.Position = UDim2.new(0.5, -215, 0.5, -100)
-frame.BackgroundColor3 = Color3.fromRGB(0, 5, 15)
-frame.BackgroundTransparency = 0.1
+frame.Size = UDim2.new(0, 650, 0, 360)
+frame.Position = UDim2.new(0.5, -325, 0.5, -180)
+frame.BackgroundColor3 = Color3.fromRGB(8, 12, 22)
+frame.BorderSizePixel = 0
+frame.BackgroundTransparency = 0.05
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 45)
 
-local stroke = Instance.new("UIStroke", frame)
-stroke.Color = Color3.fromRGB(0, 255, 255)
-stroke.Thickness = 2
+-- GLow (dùng image có glow sẵn, nếu không có thì bỏ phần này cũng được)
+local glow = Instance.new("ImageLabel", frame)
+glow.Size = UDim2.new(1, 120, 1, 120)
+glow.Position = UDim2.new(0.5, -385, 0.5, -220)
+glow.Image = "rbxassetid://5028857084" -- generic glow sprite
+glow.ImageColor3 = Color3.fromRGB(0, 255, 255)
+glow.ImageTransparency = 0.55
+glow.ZIndex = -1
+glow.BackgroundTransparency = 1
 
-local corner = Instance.new("UICorner", frame)
-corner.CornerRadius = UDim.new(0,18)
-
--- Fade effect
-frame.BackgroundTransparency = 1
-frame.Size = UDim2.new(0, 350, 0, 150)
-task.spawn(function()
-    for i = 1,10 do
-        frame.BackgroundTransparency = 1 - (i/10)
-        task.wait(0.02)
-    end
-    frame:TweenSize(UDim2.new(0,430,0,200), "Out", "Quad", 0.25)
-end)
-
---================= TITLE + LOGO ===================--
-
-local titleFrame = Instance.new("Frame", frame)
-titleFrame.Size = UDim2.new(1, -40, 0, 50)
-titleFrame.Position = UDim2.new(0, 20, 0, 10)
-titleFrame.BackgroundTransparency = 1
-
-local logo = Instance.new("ImageLabel", titleFrame)
-logo.Size = UDim2.new(0, 40, 0, 40)
-logo.Position = UDim2.new(0, 0, 0, 5)
-logo.BackgroundTransparency = 1
-logo.Image = "rbxassetid://71650015621288"
-logo.ScaleType = Enum.ScaleType.Fit
-
-local logoCorner = Instance.new("UICorner", logo)
-logoCorner.CornerRadius = UDim.new(1, 0)
-
-local title = Instance.new("TextLabel", titleFrame)
-title.Size = UDim2.new(1, -55, 1, 0)
-title.Position = UDim2.new(0, 50, 0, 0)
+-- TITLE
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 70)
+title.Position = UDim2.new(0, 0, 0, 15)
 title.BackgroundTransparency = 1
-title.Text = "CozyHub Key Verification"
-title.TextColor3 = Color3.fromRGB(0,255,255)
+title.Text = "CozyHub Key"
+title.TextColor3 = Color3.fromRGB(0, 255, 255)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 22
-title.TextXAlignment = Enum.TextXAlignment.Left
+title.TextSize = 46
 
---================ INPUT FIELD ====================--
+-- INPUT OUTLINE BOX
+local inputHolder = Instance.new("Frame", frame)
+inputHolder.Size = UDim2.new(0, 410, 0, 60)
+inputHolder.Position = UDim2.new(0.05, 0, 0.30, 0)
+inputHolder.BackgroundColor3 = Color3.fromRGB(8, 12, 22)
+inputHolder.BorderSizePixel = 0
+Instance.new("UICorner", inputHolder).CornerRadius = UDim.new(0, 35)
 
-local keyBox = Instance.new("TextBox", frame)
-keyBox.Size = UDim2.new(1, -40, 0, 38)
-keyBox.Position = UDim2.new(0,20, 0,70)
+local inputStroke = Instance.new("UIStroke", inputHolder)
+inputStroke.Color = Color3.fromRGB(0,255,255)
+inputStroke.Thickness = 2
+inputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+local keyBox = Instance.new("TextBox", inputHolder)
+keyBox.Size = UDim2.new(1, -40, 1, -20)
+keyBox.Position = UDim2.new(0, 20, 0, 10)
+keyBox.BackgroundTransparency = 1
 keyBox.PlaceholderText = "Enter your key..."
-keyBox.BackgroundColor3 = Color3.fromRGB(0,0,0)
-keyBox.BackgroundTransparency = 0.15
-keyBox.TextColor3 = Color3.fromRGB(255,255,255)
+keyBox.PlaceholderColor3 = Color3.fromRGB(100, 150, 170)
+keyBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 keyBox.Font = Enum.Font.Gotham
-keyBox.TextSize = 18
-Instance.new("UICorner", keyBox).CornerRadius = UDim.new(0,12)
+keyBox.TextSize = 22
+keyBox.ClearTextOnFocus = false
+keyBox.TextXAlignment = Enum.TextXAlignment.Left
 
-local boxStroke = Instance.new("UIStroke", keyBox)
-boxStroke.Color = Color3.fromRGB(0,255,255)
-boxStroke.Thickness = 2
-
---================ BUTTONS ====================--
-
+-- VERIFY BUTTON
 local verifyBtn = Instance.new("TextButton", frame)
-verifyBtn.Size = UDim2.new(0.45, -20, 0, 38)
-verifyBtn.Position = UDim2.new(0,20, 0,125)
+verifyBtn.Size = UDim2.new(0, 180, 0, 60)
+verifyBtn.Position = UDim2.new(0.70, 0, 0.30, 0)
+verifyBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 230)
+verifyBtn.BorderSizePixel = 0
 verifyBtn.Text = "VERIFY KEY"
-verifyBtn.BackgroundColor3 = Color3.fromRGB(0,180,220)
 verifyBtn.TextColor3 = Color3.fromRGB(0,0,0)
 verifyBtn.Font = Enum.Font.GothamBold
-verifyBtn.TextSize = 18
-Instance.new("UICorner", verifyBtn).CornerRadius = UDim.new(0,12)
+verifyBtn.TextSize = 24
+Instance.new("UICorner", verifyBtn).CornerRadius = UDim.new(0, 35)
 
+-- GET KEY BUTTON
 local getBtn = Instance.new("TextButton", frame)
-getBtn.Size = UDim2.new(0.45, -20, 0, 38)
-getBtn.Position = UDim2.new(0.55, 0, 0,125)
+getBtn.Size = UDim2.new(0.90, 0, 0, 70)
+getBtn.Position = UDim2.new(0.05, 0, 0.50, 0)
+getBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 230)
+getBtn.BorderSizePixel = 0
 getBtn.Text = "GET KEY"
-getBtn.BackgroundColor3 = Color3.fromRGB(0,120,150)
 getBtn.TextColor3 = Color3.fromRGB(0,0,0)
 getBtn.Font = Enum.Font.GothamBold
-getBtn.TextSize = 18
-Instance.new("UICorner", getBtn).CornerRadius = UDim.new(0,12)
+getBtn.TextSize = 28
+Instance.new("UICorner", getBtn).CornerRadius = UDim.new(0, 40)
 
+-- MESSAGE BOX
 local msg = Instance.new("TextLabel", frame)
-msg.Size = UDim2.new(1,0,0,22)
-msg.Position = UDim2.new(0,0,0,165)
-msg.BackgroundTransparency = 1
-msg.Font = Enum.Font.GothamBold
-msg.TextSize = 16
-msg.TextColor3 = Color3.fromRGB(255,70,70)
+msg.Size = UDim2.new(0.90, 0, 0, 70)
+msg.Position = UDim2.new(0.05, 0, 0.72, 0)
+msg.BackgroundColor3 = Color3.fromRGB(110, 20, 20)
+msg.BorderSizePixel = 0
 msg.Text = ""
+msg.TextColor3 = Color3.fromRGB(255,130,90)
+msg.Font = Enum.Font.GothamBold
+msg.TextSize = 28
+msg.Visible = false
+Instance.new("UICorner", msg).CornerRadius = UDim.new(0, 40)
 
--- Glow animation
-task.spawn(function()
-    while gui.Parent do
-        stroke.Color = Color3.fromRGB(0,200,255)
-        task.wait(0.35)
-        stroke.Color = Color3.fromRGB(0,255,255)
-        task.wait(0.35)
-    end
-end)
+--================= NƠI BẠN TỰ GẮN SCRIPT CHÍNH =================--
+
+local function onKeyValid()
+    -- 🔥 CHỖ NÀY BẠN TỰ THAY
+    -- ví dụ: loadstring(game:HttpGet("LINK_SCRIPT_CỦA_BẠN"))()
+end
 
 --================= BUTTON LOGIC ===================--
 
@@ -224,52 +215,48 @@ verifyBtn.MouseButton1Click:Connect(function()
     if verifying then return end
     verifying = true
 
-    msg.TextColor3 = Color3.fromRGB(255,70,70)
-    local key = trim(keyBox.Text or "")
+    local key = (keyBox.Text or ""):gsub("^%s+", ""):gsub("%s+$", "")
 
     if key == "" then
-        msg.Text = "Please enter a key."
+        msg.Text = "Please enter a key!"
+        msg.TextColor3 = Color3.fromRGB(255,130,90)
+        msg.BackgroundColor3 = Color3.fromRGB(110,20,20)
+        msg.Visible = true
         verifying = false
         return
     end
 
     msg.Text = "Checking key..."
+    msg.TextColor3 = Color3.fromRGB(255,255,255)
+    msg.BackgroundColor3 = Color3.fromRGB(40,40,70)
+    msg.Visible = true
 
-    local ok, reason = checkKey(key)
+    local ok, reason = validateKey(key)
 
     if ok then
-        msg.Text = "Key valid ✔"
+        msg.Text = "Key valid!"
         msg.TextColor3 = Color3.fromRGB(70,255,70)
+        msg.BackgroundColor3 = Color3.fromRGB(0,60,0)
+        msg.Visible = true
 
-        markKeyUsed(key)
+        markUsed(key)
         task.wait(0.4)
 
-        --========= RUN MAIN SCRIPT =========--
-        local success, err = pcall(function()
-            loadstring(game:HttpGet(SCRIPT_URL))()
-        end)
-
-        if not success then
-            msg.Text = "Error loading script!"
-            msg.TextColor3 = Color3.fromRGB(255,70,70)
-            warn("SCRIPT ERROR:", err)
-        else
-            frame:TweenSize(UDim2.new(0,0,0,0), "In", "Quad", 0.25, true, function()
-                gui:Destroy()
-            end)
-        end
-
+        onKeyValid()   -- 🔥 ở đây nó gọi hàm của bạn
     else
-        msg.Text = reason
-        msg.TextColor3 = Color3.fromRGB(255,70,70)
+        msg.Text = reason or "Invalid key!"
+        msg.TextColor3 = Color3.fromRGB(255,130,90)
+        msg.BackgroundColor3 = Color3.fromRGB(110,20,20)
+        msg.Visible = true
     end
 
-    task.wait(1)
     verifying = false
 end)
 
 getBtn.MouseButton1Click:Connect(function()
     setclipboard(GET_KEY_URL)
+    msg.Text = "Get-key link copied!"
     msg.TextColor3 = Color3.fromRGB(70,255,70)
-    msg.Text = "Get key link copied!"
+    msg.BackgroundColor3 = Color3.fromRGB(0,60,0)
+    msg.Visible = true
 end)
